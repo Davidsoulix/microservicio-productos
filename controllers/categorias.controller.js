@@ -52,7 +52,7 @@ class CategoriasController {
             const nuevaCategoria = CategoriaModel.create(req.body);
             res.status(201).json({ 
                 success: true, 
-                message: 'Categoría creada exitosamente',
+                message: 'Categoría creada exitosamente como una prueba de webhook',
                 data: nuevaCategoria 
             });
         } catch (error) {
