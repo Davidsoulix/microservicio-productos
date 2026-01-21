@@ -1,6 +1,5 @@
 # Usar imagen oficial de Node.js
-FROM node:10.0.0-alpine
-#FROM node:18-alpine
+FROM node:18-alpine
 
 # Establecer directorio de trabajo
 WORKDIR /app
@@ -23,4 +22,3 @@ ENV NODE_ENV=production
 
 # Comando para ejecutar la aplicación
 CMD ["npm", "start"]
-

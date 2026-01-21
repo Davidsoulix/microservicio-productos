@@ -1,11 +1,31 @@
 const CategoriaModel = require('../models/categoria.model');
 
 class CategoriasController {
+    static healthCheck(req, res) {
+        try {
+            const categorias = CategoriaModel.getAll();
+            res.json({
+                success: true,
+                message: 'Servicio de categorías funcionando correctamente',
+                timestamp: new Date().toISOString(),
+                categoriasLoaded: categorias.length
+            });
+        } catch (error) {
+            console.error('Error en healthCheck categorías:', error);
+            res.status(500).json({ success: false, error: 'Error en health check' });
+        }
+    }
+
     static getAll(req, res) {
         try {
             const categorias = CategoriaModel.getAll();
-            res.json({ success: true, data: categorias });
+            res.json({ 
+                success: true, 
+                count: categorias.length,
+                data: categorias 
+            });
         } catch (error) {
+            console.error('Error en getAll categorías:', error);
             res.status(500).json({ success: false, error: error.message });
         }
     }
@@ -18,6 +38,7 @@ class CategoriasController {
             }
             res.json({ success: true, data: categoria });
         } catch (error) {
+            console.error('Error en getById categoría:', error);
             res.status(500).json({ success: false, error: error.message });
         }
     }
@@ -29,8 +50,13 @@ class CategoriasController {
                 return res.status(400).json({ success: false, error: 'El nombre es requerido' });
             }
             const nuevaCategoria = CategoriaModel.create(req.body);
-            res.status(201).json({ success: true, data: nuevaCategoria });
+            res.status(201).json({ 
+                success: true, 
+                message: 'Categoría creada exitosamente',
+                data: nuevaCategoria 
+            });
         } catch (error) {
+            console.error('Error en create categoría:', error);
             res.status(500).json({ success: false, error: error.message });
         }
     }
@@ -41,8 +67,13 @@ class CategoriasController {
             if (!categoriaActualizada) {
                 return res.status(404).json({ success: false, error: 'Categoría no encontrada' });
             }
-            res.json({ success: true, data: categoriaActualizada });
+            res.json({ 
+                success: true, 
+                message: 'Categoría actualizada exitosamente',
+                data: categoriaActualizada 
+            });
         } catch (error) {
+            console.error('Error en update categoría:', error);
             res.status(500).json({ success: false, error: error.message });
         }
     }
@@ -55,6 +86,7 @@ class CategoriasController {
             }
             res.json({ success: true, message: 'Categoría eliminada correctamente' });
         } catch (error) {
+            console.error('Error en delete categoría:', error);
             res.status(500).json({ success: false, error: error.message });
         }
     }

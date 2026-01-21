@@ -1,0 +1,175 @@
+# Docker
+# Build a Docker image and push to Docker Hub and Azure Container Registry
+# https://docs.microsoft.com/azure/devops/pipelines/languages/docker
+
+trigger:
+- main
+  
+resources:
+- repo: self
+
+variables:
+  tag: '$(Build.BuildId)'
+  # Docker Hub
+  dockerHubServiceConnection: 'dockerhub-connection'
+  dockerHubRepository: 'soegrupogg/microservicio-productos'
+  # Azure Container Registry
+  acrServiceConnection: 'containerRegistry-connection'
+  acrName: 'microservicioproductosreg.azurecr.io'
+  acrRepository: 'microservicio-productos'
+  # Image names
+  dockerHubImageName: 'soegrupogg/microservicio-productos:$(tag)'
+  acrImageName: '$(acrName)/$(acrRepository):$(tag)'
+
+stages:
+- stage: SecurityScan
+  displayName: Security Scanning
+  jobs:
+  - job: InstallTools
+    displayName: Install Security Tools
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+    - script: |
+        echo "Instalando Trivy..."
+        sudo apt-get update
+        sudo apt-get install -y wget apt-transport-https gnupg lsb-release
+        wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+        echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee -a /etc/apt/sources.list.d/trivy.list
+        sudo apt-get update
+        sudo apt-get install -y trivy
+        trivy --version
+      displayName: 'Install Trivy'
+    
+    - script: |
+        echo "Instalando Grype..."
+        curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sudo sh -s -- -b /usr/local/bin
+        grype version
+      displayName: 'Install Grype'
+    
+    - script: |
+        echo "Verificando instalación de Docker..."
+        docker --version
+      displayName: 'Verify Docker Installation'
+
+  - job: TrivyScan
+    displayName: Trivy Security Scan
+    dependsOn: InstallTools
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+    - script: |
+        echo "Instalando Trivy..."
+        sudo apt-get update
+        sudo apt-get install -y wget apt-transport-https gnupg lsb-release
+        wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+        echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee -a /etc/apt/sources.list.d/trivy.list
+        sudo apt-get update
+        sudo apt-get install -y trivy
+      displayName: 'Install Trivy'
+    
+    - script: |
+        trivy config $(Build.SourcesDirectory)/dockerfile --exit-code 0 --severity HIGH,CRITICAL
+      displayName: 'Trivy - Scan Dockerfile'
+    
+    - script: |
+        docker build -t $(dockerHubImageName) -f $(Build.SourcesDirectory)/dockerfile $(Build.SourcesDirectory)
+      displayName: 'Build Docker Image for Scanning'
+    
+    - script: |
+        trivy image --exit-code 0 --severity CRITICAL $(dockerHubImageName)
+      displayName: 'Trivy - Scan Docker Image (Fail on Critical)'
+    
+    - script: |
+        trivy image --exit-code 0 --severity HIGH,CRITICAL --format table $(dockerHubImageName)
+      displayName: 'Trivy - Show All Vulnerabilities'
+    
+    - script: |
+        trivy image --format json --output $(Build.ArtifactStagingDirectory)/trivy-report.json $(dockerHubImageName)
+      displayName: 'Trivy - Generate JSON Report'
+    
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish Trivy Report'
+      condition: always()
+      inputs:
+        PathtoPublish: '$(Build.ArtifactStagingDirectory)/trivy-report.json'
+        ArtifactName: 'trivy-security-report'
+
+  - job: GrypeScan
+    displayName: Grype Security Scan
+    dependsOn: InstallTools
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+    - script: |
+        echo "Instalando Grype..."
+        curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sudo sh -s -- -b /usr/local/bin
+      displayName: 'Install Grype'
+    
+    - script: |
+        docker build -t $(dockerHubImageName) -f $(Build.SourcesDirectory)/dockerfile $(Build.SourcesDirectory)
+      displayName: 'Build Docker Image for Grype Scanning'
+    
+    - script: |
+        grype $(dockerHubImageName) 
+      displayName: 'Grype - Scan Docker Image (Fail on Critical)'
+    
+    - script: |
+        grype $(dockerHubImageName) -o table
+      displayName: 'Grype - Show All Vulnerabilities'
+    
+    - script: |
+        grype $(dockerHubImageName) -o json --file $(Build.ArtifactStagingDirectory)/grype-report.json
+      displayName: 'Grype - Generate JSON Report'
+    
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish Grype Report'
+      condition: always()
+      inputs:
+        PathtoPublish: '$(Build.ArtifactStagingDirectory)/grype-report.json'
+        ArtifactName: 'grype-security-report'
+
+- stage: PushToRegistries
+  displayName: Push to Container Registries
+  dependsOn: SecurityScan
+  condition: succeeded()
+  jobs:
+  - job: PushToDockerHub
+    displayName: Push to Docker Hub
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+    - script: |
+        docker build -t $(dockerHubImageName) -t $(dockerHubRepository):latest -f $(Build.SourcesDirectory)/dockerfile $(Build.SourcesDirectory)
+      displayName: 'Build Docker Image for Docker Hub'
+    
+    - task: Docker@2
+      displayName: Login to Docker Hub
+      inputs:
+        command: login
+        containerRegistry: $(dockerHubServiceConnection)
+    
+    - script: |
+        docker push $(dockerHubImageName)
+        docker push $(dockerHubRepository):latest
+      displayName: 'Push Image to Docker Hub'
+  
+  - job: PushToACR
+    displayName: Push to Azure Container Registry
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+    - script: |
+        docker build -t $(acrImageName) -t $(acrName)/$(acrRepository):latest -f $(Build.SourcesDirectory)/dockerfile $(Build.SourcesDirectory)
+      displayName: 'Build Docker Image for ACR'
+    
+    - task: Docker@2
+      displayName: Login to Azure Container Registry
+      inputs:
+        command: login
+        containerRegistry: $(acrServiceConnection)
+    
+    - script: |
+        docker push $(acrImageName)
+        docker push $(acrName)/$(acrRepository):latest
+      displayName: 'Push Image to ACR'
