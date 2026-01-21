@@ -12,7 +12,7 @@ class ProductosController {
       });
     } catch (error) {
       console.error('Error en healthCheck productos:', error);
-      res.status(500).json({ success: false, error: 'Error en health check' });
+      res.status(500).json({ success: false, error: 'Error en health check revise el puerto de entrada' });
     }
   }
 
