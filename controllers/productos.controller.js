@@ -6,7 +6,7 @@ class ProductosController {
       const productos = ProductoModel.getAll();
       res.json({
         success: true,
-        message: 'Servicio de productos funcionando correctamente',
+        message: 'Servicio de productos funcionando correctamente como prueba de webhook con jenkins',
         timestamp: new Date().toISOString(),
         productosLoaded: productos.length
       });
